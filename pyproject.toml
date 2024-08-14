@@ -16,7 +16,7 @@ prompt-toolkit = "^3.0.47"
 # We don't want to cause a dependency conflict where akson package is installed.
 # These packages are quite stable and not expected to have breaking changes.
 fastapi = ">=0.111.0"
-uvicorn = ">=0.30.0"
+uvicorn = ">=0.25.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.2"
