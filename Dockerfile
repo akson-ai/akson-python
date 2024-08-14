@@ -10,7 +10,6 @@ RUN poetry install --only main
 
 # Copy source
 COPY akson akson
-COPY cli cli
 
 # Install project
 RUN poetry install
