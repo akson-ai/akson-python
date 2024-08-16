@@ -28,7 +28,7 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-akson = 'akson.cli.main:main'
+akson = 'akson.cli.main:cli'
 
 [tool.black]
 line-length = 120

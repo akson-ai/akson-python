@@ -2,6 +2,8 @@
 
 import os
 import uuid
+import logging
+import importlib
 
 import click
 from prompt_toolkit import PromptSession
@@ -13,10 +15,17 @@ history = FileHistory(os.path.join(os.environ["HOME"], ".akson_history"))
 session = PromptSession(history=history)
 
 
-@click.command()
+@click.group()
+@click.option("--debug/--no-debug", default=False)
+def cli(debug):
+    if debug:
+        logging.basicConfig(level=logging.DEBUG)
+
+
+@cli.command()
 @click.option("--agent", default="assistant", required=True, help="Agent name")
 @click.option("--message", default="", required=False, help="Message to send")
-def main(agent, message):
+def chat(agent, message):
     # Do not run REPL if message is provided on the command line
     if message:
         reply = _send_message(agent, message)
@@ -38,6 +47,16 @@ def main(agent, message):
         print(reply)
 
 
+@cli.command()
+@click.argument("module", required=True, default="agent")
+def run(module: str):
+    if module.endswith(".py"):
+        module = module[:-3]
+    module = module.replace("/", ".")
+    m = importlib.import_module(module)
+    m.agent.run()
+
+
 def _send_message(agent, message, session_id=None):
     try:
         return akson.send_message(agent, message, session_id=session_id)
@@ -48,4 +67,4 @@ def _send_message(agent, message, session_id=None):
 
 
 if __name__ == "__main__":
-    main()
+    cli()
