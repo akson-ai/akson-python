@@ -2,12 +2,14 @@
 
 import os
 import time
+import json
 import threading
 from abc import ABC, abstractmethod
 from textwrap import dedent
 
 import uvicorn
 import requests
+from websockets.sync.client import connect
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -78,6 +80,10 @@ def run_agents(*agents: Agent):
         t.daemon = True
         t.start()
 
+        t = threading.Thread(target=_connect_websocket, args=(agent,))
+        t.daemon = True
+        t.start()
+
     app = FastAPI()
     for agent in agents:
         handler = _create_agent_handler(agent)
@@ -137,6 +143,25 @@ def _check_response(response: requests.Response):
             if cls.__name__ == e.response.json()["name"]:
                 raise cls(e.response.json()["message"])
         raise
+
+
+def _connect_websocket(agent: Agent):
+    # Give some time for the server to start.
+    # Otherwise, akson will not be able to connect to it for verification.
+    time.sleep(1)
+
+    while True:
+        try:
+            with connect(f"ws://{AKSON_API_URL}/ws") as websocket:
+                websocket.send(json.dumps({"agent": agent.name, "description": agent.description}))
+                while True:
+                    input = AgentInput.model_validate(json.loads(websocket.recv()))
+                    output = agent.handle_message(input)
+                    websocket.send(json.dumps(output.model_dump()))
+        except Exception as e:
+            print(f"Failed to connect to websocket endpoint: {e}")
+        finally:
+            time.sleep(5)
 
 
 def send_message(agent: str | Agent, message: str, autoformat=True, session_id: str | None = None) -> str:
