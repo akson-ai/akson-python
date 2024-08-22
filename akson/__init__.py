@@ -120,7 +120,7 @@ async def _register_agent(agent: Agent):
                 _check_response(response)
         except Exception as e:
             print(f"Failed to register agent: {e}")
-            asyncio.sleep(5)
+            await asyncio.sleep(5)
         else:
             return
 
