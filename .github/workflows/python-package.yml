@@ -1,0 +1,41 @@
+name: Python package
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Install poetry
+      run: pipx install poetry
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+        cache: 'poetry'
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Add virtual environment to PATH
+      run: echo "$(poetry env info --path)/bin" >> $GITHUB_PATH
+
+    - name: Check types with pyright
+      uses: jakebailey/pyright-action@v2
+
+    - name: Lint with flake8
+      run: flake8
+
+    # - name: Test with pytest
+    #   run: pytest
+
+    - name: Lint with black
+      run: black --check --diff .
