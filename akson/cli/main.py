@@ -2,6 +2,7 @@
 
 import os
 import uuid
+import asyncio
 import logging
 import importlib
 
@@ -59,7 +60,9 @@ def run(module: str):
 
 def _send_message(agent, message, session_id=None):
     try:
-        return akson.send_message(agent, message, session_id=session_id)
+        coro = akson.send_message(agent, message, session_id=session_id)
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(coro)
     except Exception as e:
         if isinstance(e, akson.AksonException):
             raise click.ClickException(e.message)

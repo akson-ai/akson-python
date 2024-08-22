@@ -2,12 +2,13 @@
 
 import os
 import time
-import threading
+import asyncio
 from abc import ABC, abstractmethod
 from textwrap import dedent
+from contextlib import asynccontextmanager
 
 import uvicorn
-import requests
+import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -61,7 +62,7 @@ class Agent(ABC):
     """A short description of the agent."""
 
     @abstractmethod
-    def handle_message(self, input: AgentInput) -> AgentOutput:
+    async def handle_message(self, input: AgentInput) -> AgentOutput:
         """Handle incoming message from another agent."""
         ...
 
@@ -73,12 +74,16 @@ class Agent(ABC):
 def run_agents(*agents: Agent):
     """Run multiple agents together in a single HTTP server.
     Each agent will be registered under separate URLs (/<agent_name>)."""
-    for agent in agents:
-        t = threading.Thread(target=_register_agent, args=(agent,))
-        t.daemon = True
-        t.start()
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        asyncio.get_running_loop().set_debug(True)
+        for agent in agents:
+            asyncio.create_task(_register_agent(agent))
+        yield
+
+    app = FastAPI(lifespan=lifespan)
+
     for agent in agents:
         handler = _create_agent_handler(agent)
         app.router.post(f"/{agent.name}")(handler)
@@ -90,7 +95,7 @@ def _create_agent_handler(agent: Agent):
     async def handle_message(request: AgentInput):
         if request.message == "Akson-HealthCheck":
             return AgentOutput(message="OK")
-        return agent.handle_message(request)
+        return await agent.handle_message(request)
 
     return handle_message
 
@@ -101,36 +106,32 @@ def _callback_url(agent_name: str) -> str:
     return f"http://{AGENT_HOST}:{AGENT_PORT}/{agent_name}"
 
 
-def _register_agent(agent: Agent):
-    # Give some time for the server to start.
-    # Otherwise, akson will not be able to connect to it for verification.
-    time.sleep(1)
-
+async def _register_agent(agent: Agent):
     while True:
         try:
-            response = requests.post(
-                f"{AKSON_API_URL}/register-agent",
-                json={
-                    "name": agent.name,
-                    "description": agent.description,
-                    "callback_url": _callback_url(agent.name),
-                },
-            )
-            _check_response(response)
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{AKSON_API_URL}/register-agent",
+                    json={
+                        "name": agent.name,
+                        "description": agent.description,
+                        "callback_url": _callback_url(agent.name),
+                    },
+                )
+                _check_response(response)
         except Exception as e:
             print(f"Failed to register agent: {e}")
+            time.sleep(5)
         else:
             return
-        finally:
-            time.sleep(5)
 
 
-def _check_response(response: requests.Response):
+def _check_response(response: httpx.Response):
     """Check response from Akson API.
     Parses the response and raises AksonException if the response contains an error."""
     try:
         response.raise_for_status()
-    except requests.HTTPError as e:
+    except httpx.HTTPStatusError as e:
         if not e.response.headers.get("Akson-Error"):
             raise
         for cls in AksonException.__subclasses__():
@@ -139,16 +140,18 @@ def _check_response(response: requests.Response):
         raise
 
 
-def send_message(agent: str | Agent, message: str, autoformat=True, session_id: str | None = None) -> str:
+async def send_message(agent: str | Agent, message: str, autoformat=True, session_id: str | None = None) -> str:
     """Send message to agent."""
     if autoformat:
         message = dedent(message)
 
     # Local agent communication
     if isinstance(agent, Agent):
-        return agent.handle_message(AgentInput(message=message, session_id=session_id)).message
+        reply = await agent.handle_message(AgentInput(message=message, session_id=session_id))
+        return reply.message
 
     endpoint = f"{AKSON_API_URL}/send-message"
-    response = requests.post(endpoint, json={"agent": agent, "message": message, "session_id": session_id})
-    _check_response(response)
-    return response.json()["message"]
+    async with httpx.AsyncClient() as client:
+        response = await client.post(endpoint, json={"agent": agent, "message": message, "session_id": session_id})
+        _check_response(response)
+        return response.json()["message"]
