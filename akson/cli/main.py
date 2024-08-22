@@ -26,10 +26,11 @@ def cli(debug):
 @cli.command()
 @click.option("--agent", default="assistant", required=True, help="Agent name")
 @click.option("--message", default="", required=False, help="Message to send")
-def chat(agent, message):
+@click.option("--timeout", default=30, required=False, help="Timeout in seconds")
+def chat(agent, message, timeout):
     # Do not run REPL if message is provided on the command line
     if message:
-        reply = _send_message(agent, message)
+        reply = _send_message(agent, message, timeout=timeout)
         print(reply)
         return
 
@@ -44,7 +45,7 @@ def chat(agent, message):
         if user_input in ["exit", "quit"]:
             break
 
-        reply = _send_message(agent, user_input, session_id)
+        reply = _send_message(agent, user_input, session_id=session_id, timeout=timeout)
         print(reply)
 
 
@@ -58,9 +59,9 @@ def run(module: str):
     m.agent.run()
 
 
-def _send_message(agent, message, session_id=None):
+def _send_message(agent, message, *, session_id=None, timeout=None):
     try:
-        coro = akson.send_message(agent, message, session_id=session_id)
+        coro = akson.send_message(agent, message, session_id=session_id, timeout=timeout)
         loop = asyncio.get_event_loop()
         return loop.run_until_complete(coro)
     except Exception as e:

@@ -1,7 +1,6 @@
 """Akson library for developing AI agents."""
 
 import os
-import time
 import asyncio
 from abc import ABC, abstractmethod
 from textwrap import dedent
@@ -140,7 +139,14 @@ def _check_response(response: httpx.Response):
         raise
 
 
-async def send_message(agent: str | Agent, message: str, autoformat=True, session_id: str | None = None) -> str:
+async def send_message(
+    agent: str | Agent,
+    message: str,
+    *,
+    autoformat=True,
+    session_id: str | None = None,
+    timeout: float | None = 30,
+) -> str:
     """Send message to agent."""
     if autoformat:
         message = dedent(message)
@@ -152,6 +158,7 @@ async def send_message(agent: str | Agent, message: str, autoformat=True, sessio
 
     endpoint = f"{AKSON_API_URL}/send-message"
     async with httpx.AsyncClient() as client:
-        response = await client.post(endpoint, json={"agent": agent, "message": message, "session_id": session_id})
+        data = {"agent": agent, "message": message, "session_id": session_id}
+        response = await client.post(endpoint, json=data, timeout=timeout)
         _check_response(response)
         return response.json()["message"]
