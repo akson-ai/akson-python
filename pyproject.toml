@@ -1,8 +1,11 @@
 [tool.poetry]
 name = "akson"
-version = "0.3.0"
+version = "0.3.1"
 description = "CLI and libary for Akson AI agents"
 authors = ["Akson AI <hi@akson.ai>"]
+homepage = "https://akson.ai"
+repository = "https://github.com/akson-ai/akson-python"
+keywords = ["ai", "agents"]
 
 [tool.poetry.dependencies]
 python = "^3.12"
