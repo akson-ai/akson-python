@@ -1,6 +1,7 @@
 """Akson library for developing AI agents."""
 
 import os
+from typing import Callable
 import asyncio
 from abc import ABC, abstractmethod
 from textwrap import dedent
@@ -51,6 +52,44 @@ class AgentOutput(BaseModel):
     message: str
 
 
+class Arg(BaseModel):
+    name: str
+    arg_type: str
+    description: str | None
+
+
+class Example(BaseModel):
+    input: Arg
+    output: Arg
+
+
+from typing import TypeVar
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class Skill(BaseModel):
+    name: str
+    description: str
+    input_arg: Arg
+    output_arg: Arg
+    examples: list[Example] = []
+
+    def example(self, input: type[T], output: type[T]) -> None:
+        # input_arg = Arg(
+        #     name=input.__name__,
+        #     arg_type=input.__cls__.__name__,
+        #     description=input.__doc__,
+        # )
+        # output_arg = Arg(
+        #     name=output.__name__,
+        #     arg_type=output.__cls__.__name__,
+        #     description=output.__doc__,
+        # )
+        # self.examples.append(Example(input=input_arg, output=output_arg))
+        ...
+
+
 class Agent(ABC):
     """Base class for all agents."""
 
@@ -68,6 +107,67 @@ class Agent(ABC):
     def run(self):
         """Starts an HTTP server to run the agent."""
         run_agents(self)
+
+    skills: dict[str, Skill] = {}
+
+    @classmethod
+    def skill(cls):
+        """Decorator for registering an agent skill."""
+
+        def wrapper(f: Callable):
+            skill = create_skill(f)
+            cls.skills[skill.name] = skill
+            return skill
+
+        return wrapper
+
+    # def task(self, queue: str = 'kuyruk', **kwargs: Any) -> Callable:
+    #     def wrapper(f: Callable) -> Task:
+    #         return Task(f, self, queue, **kwargs)
+
+    #     return wrapper
+
+    def _get_skills(self):
+        return self.skills
+
+
+# def parse_annotations_for_skills(annotations: dict[str, type]) -> Arg:
+#     return Arg(
+#             name=annotations["return"].__name__,
+#             arg_type=cls.__name__,
+#             description=cls.__doc__ or "",
+#         )
+
+
+def create_skill(f: Callable) -> Skill:
+    """Create an agent skill from a function."""
+    assert len(f.__annotations__) == 2
+    input_arg = None
+    output_arg = None
+    for name, cls in f.__annotations__.items():
+        if name == "return":
+            output_arg = Arg(
+                name=cls.__name__,
+                arg_type=cls.__class__.__name__,
+                description=cls.__doc__ or "",
+            )
+        else:
+            input_arg = Arg(
+                name=cls.__name__,
+                arg_type=cls.__class__.__name__,
+                description=cls.__doc__ or "",
+            )
+
+    assert input_arg is not None
+    assert output_arg is not None
+
+    return Skill(
+        name=f.__name__,
+        description=dedent(f.__doc__ or "").strip(),
+        input_arg=input_arg,
+        output_arg=output_arg,
+        examples=[],
+    )
 
 
 def run_agents(*agents: Agent):
@@ -90,10 +190,25 @@ def run_agents(*agents: Agent):
     uvicorn.run(app, host=AGENT_HOST, port=AGENT_PORT)
 
 
+class IntrospectionResponse(BaseModel):
+    # High level fields. Used by planner.
+    name: str
+    description: str
+
+    # Low level fields. Used by executor.
+    skills: list[Skill]
+
+
 def _create_agent_handler(agent: Agent):
     async def handle_message(request: AgentInput):
         if request.message == "Akson-HealthCheck":
             return AgentOutput(message="OK")
+        if request.message == "Akson-Introspect":
+            return IntrospectionResponse(
+                name=agent.name,
+                description=agent.description,
+                skills=list(agent._get_skills().values()),
+            )
         return await agent.handle_message(request)
 
     return handle_message
