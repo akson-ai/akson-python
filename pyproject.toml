@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "akson"
-version = "0.3.2"
+version = "0.3.3"
 description = "CLI and libary for Akson AI agents"
 authors = ["Akson AI <hi@akson.ai>"]
 homepage = "https://akson.ai"
